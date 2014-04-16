@@ -33,8 +33,13 @@ import com.uc.util.Utilities;
 
 public class ListViewBuilder {
 
-    public static ListViewBuilder newInstance(ItemViewConfig<?, ?> aItemViewBuilder) {
-        return new ListViewBuilder(aItemViewBuilder);
+    public static interface IDataSource {
+        public List<Object> getDataList();
+    }
+
+    public static ListViewBuilder newInstance(IDataSource aDataSource,
+            ItemViewConfig<?, ?>... aItemViewBuilderList) {
+        return new ListViewBuilder(aDataSource, aItemViewBuilderList);
     }
 
     /**
@@ -44,12 +49,13 @@ public class ListViewBuilder {
 
     }
 
-    private ListViewBuilder(ItemViewConfig<?, ?> aItemViewBuilder) {
-        if (null == aItemViewBuilder) {
-            throw new NullPointerException();
+    private ListViewBuilder(IDataSource aDataSource, ItemViewConfig<?, ?>... aItemViewBuilderList) {
+        this.mDataSource = aDataSource;
+
+        for (ItemViewConfig<?, ?> itemBuilder : aItemViewBuilderList) {
+            this.mItemViewBuilderList.add(itemBuilder);
         }
 
-        this.mItemViewBuilder = aItemViewBuilder;
     }
 
     private class HeaderWrap {
@@ -92,7 +98,7 @@ public class ListViewBuilder {
 
     }
 
-    private ItemViewConfig<?, ?> mItemViewBuilder;
+    private List<ItemViewConfig<?, ?>> mItemViewBuilderList = new ArrayList<ListViewBuilder.ItemViewConfig<?, ?>>();
 
     private int mBackgroundColor = -1;
 
@@ -117,8 +123,12 @@ public class ListViewBuilder {
     private List<HeaderWrap> mHeaderViewList = new ArrayList<HeaderWrap>();
 
     private OnScrollListener mOnScrollListener;
-    
+
     private View mEmptyView;
+
+    private IDataSource mDataSource;
+
+    private ListAdapter mListAdapter;
 
     public ListView build(Context aContext) {
         ListView ret = new ListView(aContext) {
@@ -128,15 +138,13 @@ public class ListViewBuilder {
             }
         };
 
-        if (null == this.mItemViewBuilder) {
+        if (null == this.mItemViewBuilderList) {
             throw new RuntimeException();
         }
 
         if (null == aContext) {
             throw new RuntimeException();
         }
-
-        this.getItemViewBuilder().setContext(aContext);
 
         if (-1 < this.mBackgroundColor) {
             ret.setBackgroundColor(this.mBackgroundColor);
@@ -180,7 +188,7 @@ public class ListViewBuilder {
         if (null != mEmptyView) {
             ret.setEmptyView(mEmptyView);
         }
-        
+
         if (null != this.mOnScrollListener) {
             ret.setOnScrollListener(this.mOnScrollListener);
         }
@@ -189,82 +197,90 @@ public class ListViewBuilder {
             ret.addHeaderView(wrap.getView(), wrap.getData(), wrap.isIsSelectable());
         }
 
-        ret.setAdapter(this.getItemViewBuilder().getListAdapter());
+        ret.setAdapter(this.getListAdapter());
 
         return ret;
     }
 
-    private ItemViewConfig<?, ?> getItemViewBuilder() {
-        return this.mItemViewBuilder;
+    protected ListAdapter getListAdapter() {
+        if (null == this.mListAdapter) {
+
+            this.mListAdapter = new BaseAdapter() {
+
+                @Override
+                public View getView(int aPosition, View aConvertView, ViewGroup aParent) {
+
+                    Object data = mDataSource.getDataList().get(aPosition);
+                    ItemViewConfig<?, ?> tagBuilder = findItemViewConfig(data.getClass());
+
+                    if (null == tagBuilder) {
+                        throw new RuntimeException(
+                                "Can not find target ItemViewBuilder. Please check dataSource return data and newInstance() arguments ItemViewConfig");
+                    }
+
+                    View itemView = null;
+
+                    if (null == aConvertView) {
+                        itemView = tagBuilder.createView();
+                    } else {
+                        itemView = aConvertView;
+                    }
+
+                    tagBuilder
+                            .update(aPosition, mDataSource.getDataList().get(aPosition), itemView);
+
+                    return (View)itemView;
+                }
+
+                private ItemViewConfig<?, ?> findItemViewConfig(Class<? extends Object> aClass) {
+
+                    for (ItemViewConfig<?, ?> itemBuilder : mItemViewBuilderList) {
+                        if (aClass.equals(itemBuilder.getDataClass())) {
+                            return itemBuilder;
+                        }
+                    }
+                    return null;
+                }
+
+                @Override
+                public long getItemId(int aPosition) {
+                    return 0;
+                }
+
+                @Override
+                public Object getItem(int aPosition) {
+                    return mDataSource.getDataList().get(aPosition);
+                }
+
+                @Override
+                public int getCount() {
+                    try {
+                        return mDataSource.getDataList().size();
+                    } catch (Exception e) {
+                        return 0;
+                    }
+                }
+            };
+        }
+
+        return this.mListAdapter;
     }
 
     public static abstract class ItemViewConfig<ItemDataClass, ItemViewClass extends View> {
 
-        private ListAdapter mListAdapter;
+        public abstract void updateItemView(final int aPosition, final ItemDataClass aData,
+                final ItemViewClass aItemView);
 
-        private Context mContext;
-
-        public Context getContext() {
-            return mContext;
+        @SuppressWarnings("unchecked")
+        public void update(final int aPosition, final Object aData, final View aItemView) {
+            this.updateItemView(aPosition, (ItemDataClass)aData, (ItemViewClass)aItemView);
         }
 
-        public void setContext(Context aContext) {
-            this.mContext = aContext;
-        }
+        public abstract Class<ItemDataClass> getDataClass();
 
-        protected ListAdapter getListAdapter() {
-            if (null == this.mListAdapter) {
+        public abstract Class<ItemViewClass> getViewClass();
 
-                this.mListAdapter = new BaseAdapter() {
-
-                    @SuppressWarnings("unchecked")
-                    @Override
-                    public View getView(int aPosition, View aConvertView, ViewGroup aParent) {
-
-                        ItemViewClass itemView = null;
-
-                        if (null == aConvertView) {
-                            itemView = (ItemViewClass)createView();
-                        } else {
-                            itemView = (ItemViewClass)aConvertView;
-                        }
-
-                        ItemViewConfig.this.updateItemView(aPosition, getDataList().get(aPosition),
-                                itemView);
-
-                        return (View)itemView;
-                    }
-
-                    @Override
-                    public long getItemId(int aPosition) {
-                        return 0;
-                    }
-
-                    @Override
-                    public Object getItem(int aPosition) {
-                        try {
-                            return getDataList().get(aPosition);
-                        } catch (Exception e) {
-                            return null;
-                        }
-                    }
-
-                    @Override
-                    public int getCount() {
-                        return ItemViewConfig.this.getDataList().size();
-                    }
-                };
-            }
-
-            return this.mListAdapter;
-        }
-
-        protected abstract void updateItemView(int aPosition, ItemDataClass aData,
-                ItemViewClass aItemView);
-
-        protected abstract List<ItemDataClass> getDataList();
-
-        protected abstract ItemViewClass createView();
+        public abstract ItemViewClass createView();
     }
 
     public ListViewBuilder setBackgroundColor(int aBackgroundColor) {
@@ -332,7 +348,7 @@ public class ListViewBuilder {
         this.mOnScrollListener = aListener;
         return this;
     }
-    
+
     public ListViewBuilder setEmptyView(View view) {
         this.mEmptyView = view;
         return this;
