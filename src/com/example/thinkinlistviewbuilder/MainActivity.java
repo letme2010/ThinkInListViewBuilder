@@ -6,12 +6,24 @@ import java.util.List;
 
 import android.app.Activity;
 import android.content.Context;
+import android.graphics.Canvas;
 import android.graphics.Color;
 import android.os.Bundle;
+import android.text.TextUtils.TruncateAt;
+import android.view.Gravity;
+import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewGroup.LayoutParams;
+import android.view.animation.Animation;
+import android.view.animation.AnimationSet;
+import android.view.animation.ScaleAnimation;
+import android.view.animation.TranslateAnimation;
+import android.widget.Button;
+import android.widget.CheckBox;
 import android.widget.FrameLayout;
+import android.widget.ImageView;
+import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import com.uc.browser.myvideo.ListViewBuilder;
@@ -25,11 +37,10 @@ public class MainActivity extends Activity implements IDataSource {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        FrameLayout contain = new FrameLayout(this);
-        contain.setBackgroundColor(Color.argb(100, 0, 0, 250));
-        contain.addView(this.getListView(), this.createListViewLP());
 
-        this.setContentView(contain);
+        // XXX: select view
+        {}
+
     }
 
     private static class ViewA extends FrameLayout {
